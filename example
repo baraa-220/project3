@@ -1,0 +1,104 @@
+
+
+######'
+
+
+# Task 0 — bounding box in-notebook (paste and run)
+import numpy as np
+from typing import List, Tuple
+import os
+
+def read_coords_from_dna(filename: str = "dna_coords.txt") -> List[np.ndarray]:
+    """
+    Read coordinates from dna_coords.txt placed in the notebook working directory.
+    Accepts lines of form:
+      x y z element
+    or
+      ELEMENT x y z
+    Skips blank or comment lines. Returns list of numpy arrays [x, y, z].
+    """
+    coords = []
+    with open(filename, 'r') as f:
+        for line in f:
+            s = line.strip()
+            if not s or s.startswith('#'):
+                continue
+            parts = s.split()
+            # Try formats where first three tokens are floats
+            if len(parts) >= 3:
+                try:
+                    x = float(parts[0]); y = float(parts[1]); z = float(parts[2])
+                    coords.append(np.array([x, y, z], dtype=float))
+                    continue
+                except ValueError:
+                    pass
+            # Try format: ELEMENT x y z
+            if len(parts) >= 4:
+                try:
+                    x = float(parts[1]); y = float(parts[2]); z = float(parts[3])
+                    coords.append(np.array([x, y, z], dtype=float))
+                    continue
+                except ValueError:
+                    pass
+            raise ValueError(f"Unrecognized line format: {line.rstrip()}")
+    if not coords:
+        raise ValueError(f"No coordinates parsed from {filename}")
+    return coords
+
+def bounding_box(coords: List[np.ndarray], padding: float = 1.0) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Compute axis-aligned bounding box (box_min, box_max) with padding.
+    """
+    arr = np.vstack(coords)
+    box_min = arr.min(axis=0) - padding
+    box_max = arr.max(axis=0) + padding
+    if np.any(box_max <= box_min):
+        raise ValueError("Computed bounding box has non-positive extent on at least one axis")
+    return box_min, box_max
+
+def box_volume(box_min: np.ndarray, box_max: np.ndarray) -> float:
+    """Return box volume (units^3 matching coordinates)."""
+    return float(np.prod(box_max - box_min))
+
+def print_box_summary(box_min: np.ndarray, box_max: np.ndarray, count: int):
+    dims = box_max - box_min
+    vol = box_volume(box_min, box_max)
+    print(f"N atoms: {count}")
+    print(f"box_min = ({box_min[0]:.5f}, {box_min[1]:.5f}, {box_min[2]:.5f})")
+    print(f"box_max = ({box_max[0]:.5f}, {box_max[1]:.5f}, {box_max[2]:.5f})")
+    print(f"dimensions (dx, dy, dz) = ({dims[0]:.5f}, {dims[1]:.5f}, {dims[2]:.5f})")
+    print(f"box volume = {vol:.5f} (units^3)")
+
+# -------------------------
+# Run Task 0 in this notebook
+# -------------------------
+filename = "dna_coords.txt"
+padding = 1.0  # adjust to 0.5-2.0 as needed
+
+# optional quick check of working directory and file presence
+print("Working directory:", os.getcwd())
+print("dna_coords.txt present:", os.path.exists(filename))
+
+coords = read_coords_from_dna(filename)
+box_min, box_max = bounding_box(coords, padding=padding)
+print_box_summary(box_min, box_max, len(coords))
+
+
+# Convert stored Å box to nm and print
+import numpy as np
+
+box_min_A = np.array([-49.18074, -18.77082, -10.99192])
+box_max_A = np.array([-29.77274,   3.54218,  10.89708])
+dims_A = box_max_A - box_min_A
+vol_A = 9479.04686
+
+# convert
+box_min_nm = box_min_A / 10.0
+box_max_nm = box_max_A / 10.0
+dims_nm = dims_A / 10.0
+vol_nm = vol_A / 1000.0
+
+print("box_min (nm):", box_min_nm)
+print("box_max (nm):", box_max_nm)
+print("dimensions (nm):", dims_nm)
+print("box volume (nm^3):", vol_nm)
