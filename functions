@@ -1,0 +1,159 @@
+import math
+import numpy as np
+import matplotlib.pyplot as plt
+from pathlib import Path
+
+# -----------------------------
+# Point generation and scaling
+# -----------------------------
+def point_making(num_1, lower=0, upper=1):
+    x = np.random.uniform(lower, upper, num_1)
+    y = np.random.uniform(lower, upper, num_1)
+    z = np.random.uniform(lower, upper, num_1)
+    return np.array([x, y, z]).T
+
+def re_generate_point(points, old_max=10000, new_min=None, new_max=None):
+    if new_min is None:
+        new_min = np.array([-50, -20, -10])
+    else:
+        new_min = np.array(new_min)
+    if new_max is None:
+        new_max = np.array([-30, 5, 10])
+    else:
+        new_max = np.array(new_max)
+    points = np.array(points)
+    scaled_points = new_min + (new_max - new_min) * (points / old_max)
+    return scaled_points
+
+def random_num_with_radius(amount, lower=0, upper=10000, radius_size=5):
+    delta_radius = upper - lower
+    radius = np.round(np.random.uniform(0, delta_radius / radius_size, amount))
+    x = [np.round(np.random.uniform(lower+i, upper-i)) for i in radius]
+    y = [np.round(np.random.uniform(lower+i, upper-i)) for i in radius]
+    z = [np.round(np.random.uniform(lower+i, upper-i)) for i in radius]
+    return np.array([x, y, z]).T
+
+# -----------------------------
+# Sphere and point-in-sphere
+# -----------------------------
+def inside_circle(point, sph):
+    """Check if a point is inside a given sphere"""
+    r, cx, cy, cz = sph
+    return (cx - point[0])**2 + (cy - point[1])**2 + (cz - point[2])**2 < r**2
+
+def point_in_sph(sph_list, points):
+    x_point, y_point, z_point = [], [], []
+    point_in_it = 0
+    for sph in sph_list:
+        for point in points:
+            if inside_circle(point, sph):
+                x_point.append(point[0])
+                y_point.append(point[1])
+                z_point.append(point[2])
+                point_in_it += 1
+    return x_point, y_point, z_point, point_in_it
+
+def plot_sph(sph_list):
+    u = np.linspace(0, 2 * np.pi, 100)
+    v = np.linspace(0, np.pi, 100)
+    x_sph, y_sph, z_sph = [], [], []
+    for sph in sph_list:
+        r, cx, cy, cz = sph
+        x = r * np.outer(np.cos(u), np.sin(v)) + cx
+        y = r * np.outer(np.sin(u), np.sin(v)) + cy
+        z = r * np.outer(np.ones(np.size(u)), np.cos(v)) + cz
+        x_sph.append(x.flatten())
+        y_sph.append(y.flatten())
+        z_sph.append(z.flatten())
+    return np.concatenate(x_sph), np.concatenate(y_sph), np.concatenate(z_sph)
+
+def v_sph(sph_list):
+    return [(4/3) * math.pi * (s[0]**3) for s in sph_list]
+
+def Pi_calculation(sph_list, point_in_it):
+    size_box = 100
+    pi_vals = []
+    for r, *_ in sph_list:
+        val = (3 * point_in_it * size_box**3) / (4 * r**3)
+        pi_vals.append(val)
+    return pi_vals
+
+# -----------------------------
+# Atom file parsing
+# -----------------------------
+def atom_dimensions(file_path="dna_coords.txt"):
+    atom_radius = {"H":1.2, "C":1.7, "N":1.55, "O":1.52, "P":1.8}
+    atoms_data = {atom: [] for atom in atom_radius.keys()}
+
+    path = Path(file_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"The file '{file_path}' does not exist.")
+    
+    with path.open('r') as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) != 4:
+                continue
+            atom, x_str, y_str, z_str = parts
+            if atom not in atom_radius:
+                continue
+            try:
+                x, y, z = float(x_str), float(y_str), float(z_str)
+            except ValueError:
+                continue
+            atoms_data[atom].append([atom_radius[atom], x, y, z])
+    
+    atom_arrays = {atom: np.array(data) for atom, data in atoms_data.items()}
+    all_atoms = np.vstack([arr for arr in atom_arrays.values() if len(arr) > 0])
+    return atom_arrays["H"], atom_arrays["O"], atom_arrays["P"], atom_arrays["C"], atom_arrays["N"], all_atoms
+
+# -----------------------------
+# Random walker
+# -----------------------------
+def random_walker(steps, xyz_lower=None, xyz_upper=None):
+    xyz_lower = np.array(xyz_lower if xyz_lower is not None else [-50, -20, -10])
+    xyz_upper = np.array(xyz_upper if xyz_upper is not None else [-30, 5, 10])
+    start = re_generate_point(point_making(1), 10000, xyz_lower, xyz_upper)[0]
+    path = [start]
+    for _ in range(steps):
+        step = np.random.uniform(-1, 1, 3)
+        next_point = path[-1] + step
+        if np.all(next_point >= xyz_lower) and np.all(next_point <= xyz_upper):
+            path.append(next_point)
+    return np.array(path)
+
+# -----------------------------
+# DNA plotting and spheres
+# -----------------------------
+def DNA_plotting(H, O, P, C, N, all_atoms):
+    x_h, y_h, z_h = plot_sph(H)
+    x_o, y_o, z_o = plot_sph(O)
+    x_p, y_p, z_p = plot_sph(P)
+    x_c, y_c, z_c = plot_sph(C)
+    x_n, y_n, z_n = plot_sph(N)
+    x_all, y_all, z_all = plot_sph(all_atoms)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(projection="3d")
+    ax.plot(x_h, y_h, z_h, 'o', color='white', markersize=1, label='Hydrogen')
+    ax.plot(x_o, y_o, z_o, 'o', color='red', markersize=2, label='Oxygen')
+    ax.plot(x_p, y_p, z_p, 'o', color='orange', markersize=3, label='Phosphorus')
+    ax.plot(x_c, y_c, z_c, 'o', color='grey', markersize=2, label='Carbon')
+    ax.plot(x_n, y_n, z_n, 'o', color='blue', markersize=2, label='Nitrogen')
+    ax.plot(x_all, y_all, z_all, 'o', color='green', markersize=0.5, label='All Atoms')
+
+    ax.set_xlabel("X-axis")
+    ax.set_ylabel("Y-axis")
+    ax.set_zlabel("Z-axis")
+    ax.set_title("3D DNA Structure Visualization")
+    ax.legend()
+    plt.show()
+
+def sph_calculation(file_path="dna_coords.txt"):
+    n, o, p, c, h, _ = atom_dimensions(file_path)
+    sph = []
+    for list_atom in [n, o, p, c, h]:
+        for atom in list_atom:
+            r, x, y, z = atom
+            sph.append([float(r), float(x), float(y), float(z)])
+    return np.array(sph, dtype=float)
